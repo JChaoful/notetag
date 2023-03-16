@@ -1,5 +1,6 @@
 import tempfile
 import io
+import os
 import logging
 import pickle
 
@@ -86,7 +87,7 @@ def get_items():
     results_location = 'data/results.pkl'
 
     # Check if files were already stored locally
-    if 'results' not in session:
+    if 'results' not in session or not os.path.isfile(results_location):
         drive_api = build_drive_api_v3()
         drive_fields = 'files(id,name,mimeType,shared,webContentLink, appProperties, parents, trashed, description)'
         drive_query = 'trashed = false'

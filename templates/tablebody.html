@@ -15,6 +15,7 @@
     {% else %}
         <td></td>
     {% endif %}
+    <td><button class="tags-button" data-id="{{file['id']}}" data-filename="{{file['name']}}">Tags</button></td>
     <td><button class="delete-button" data-id="{{file['id']}}">Delete</button></td>
 </tr>
 {% endfor %}
