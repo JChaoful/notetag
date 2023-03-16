@@ -18,31 +18,49 @@
       </div>
     </nav>
     <div class="container">   
-        <h3 class="mt-4">Upload a new file</h3>
-        <form method='POST' enctype='multipart/form-data' action="/gdrive/upload">
-            <div class="input-group mb-3">
-                <div class="custom-file">
-                <input type="file" name="file" class="custom-file-input" id="inputGroupFile01" aria-describedby="inputGroupFileAddon01"/>
-                <label class="custom-file-label" for="inputGroupFile01">Choose file</label>
+        <div class="upload-file">
+            <h3 class="mt-4">Upload a new file</h3>
+            <form method='POST' enctype='multipart/form-data' action="/gdrive/upload">
+                <div class="input-group mb-3">
+                    <div class="custom-file">
+                    <input type="file" name="file" class="custom-file-input" id="inputGroupFile01" aria-describedby="inputGroupFileAddon01"/>
+                    <label class="custom-file-label" for="inputGroupFile01">Choose file</label>
+                    </div>
+                    <div class="input-group-append">
+                    <input class="input-group-text" type="submit" value="Upload" />
+                    </div>
                 </div>
-                <div class="input-group-append">
-                <input class="input-group-text" type="submit" value="Upload" />
+            </form>
+        </div>
+        <div class="upload-folder">
+            <h3 class="mt-4">New folder</h3>
+            <form method='POST' enctype='multipart/form-data' action="/gdrive/upload">
+                <div class="input-group mb-3">
+                    <div class="custom-folder">
+                    <input type="text" name="folder-name" class="custom-folder-input" id="inputFolderName01" placeholder="Insert new folder name" aria-describedby="inputFolderName01"/>
+                    <label class="custom-folder-label visually-hidden" for="inputFolderName01">Insert new folder name</label>
+                    </div>
+                    <div class="input-group-append">
+                    <input class="input-group-text" type="submit" value="Submit" />
+                    </div>
                 </div>
-            </div>
-        </form>
-        <h3 class="mt-4">New folder</h3>
-        <form method='POST' enctype='multipart/form-data' action="/gdrive/upload">
+            </form>
+        </div>
+        <h3 class="mt-4">Tag Searcher</h3>
+        <form class="tag-searcher" enctype='multipart/form-data'>
             <div class="input-group mb-3">
-                <div class="custom-folder">
-                <input type="text" name="folder-name" class="custom-folder-input" id="inputFolderName01" placeholder="Insert new folder name" aria-describedby="inputFolderName01"/>
-                <label class="custom-folder-label visually-hidden" for="inputFolderName01">Insert new folder name</label>
+                <div class="search-tag">
+                <input type="text" name="tags" class="search-tag-input" id="inputTagQuery01" placeholder="Space-separated query" aria-describedby="inputTagQuery01"/>
+                <label class="custom-folder-label visually-hidden" for="inputTagQuery01">Space-separated query</label>
                 </div>
                 <div class="input-group-append">
                 <input class="input-group-text" type="submit" value="Submit" />
                 </div>
             </div>
         </form>
-        <div class="tags-container"></div>
+
+        <div class="new-tags-container"></div>
+
         <h3 class="mt-4">Recent Files</h3>
         <table class="table">
         <thead>
@@ -94,15 +112,33 @@
                 let fileName = $(this).val().split('\\').pop(); 
                 $(this).next('.custom-file-label').addClass("selected").html(fileName); 
             });
+            $('.tag-searcher').submit(function(event) {
+                event.preventDefault();
+                const tags = $('.search-tag-input').val()
+                const requestURL = '/gdrive/search';
+                $.ajax({
+                    type: "GET",
+                    url: requestURL,
+                    data: {
+                        tags: tags
+                    }, success: function(response) {
+                        $('.up-directory-button').attr("disabled", true);
+                        $('.upload-file').hide();
+                        $('.upload-folder').hide();
+                        $('tbody').empty();
+                        $('tbody').append(response['files']);
+                    }
+                });
+            })
             $('tbody').on('click', '.tags-button', function(event) { 
                 event.preventDefault();
                 const fileID = $(this).data('id');
                 const fileName = $(this).data('filename');
                 const requestURL = "/gdrive/file/" + fileID;
-                $('.tag-form-container').remove();
-                $('.tags-container').append($('<div class="tag-form-container">\
+                $('.new-tag-form-container').remove();
+                $('.new-tags-container').append($('<div class="new-tag-form-container">\
                         <h4>' + fileName + '</h4>\
-                        <form class="tag-form" data-id="' + fileID +'">\
+                        <form class="new-tag-form" data-id="' + fileID +'">\
                         <div class="input-group mb-3">\
                             <div class="custom-tags">\
                             <input type="text" name="tags" class="custom-tags-input" id="inputTagsName01" placeholder="Insert whitespace-separated tags" aria-describedby="inputTagsName01"/>\
@@ -116,7 +152,7 @@
                 </div>'));
             });
             // form override request to Patch: https://stackoverflow.com/questions/59554421/how-perform-patch-request-from-html-form-using-nodejs
-            $('.tags-container').on('submit', '.tag-form', function(event) {
+            $('.new-tags-container').on('submit', '.new-tag-form', function(event) {
                 event.preventDefault();
                 const fileID = $(this).data('id');
                 const tags = $('.custom-tags-input').val()
@@ -128,7 +164,7 @@
                         fileID: fileID,
                         tags: tags
                     }, success: function(response) {
-                        $('.tag-form-container').remove();
+                        $('.new-tag-form-container').remove();
                     }
                 });
             })
@@ -189,7 +225,10 @@
                     data: {
                         fileID: rootID
                     }, success: function(response) {
+                        $('.up-directory-button').attr("disabled", false);
                         $('.up-directory-button').attr('data-id', response['parent_id']);
+                        $('.upload-file').show();
+                        $('.upload-folder').show();
                         $('tbody').empty();
                         $('tbody').append(response['files']);
                     }

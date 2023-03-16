@@ -79,16 +79,16 @@ def get_user_info():
 
     return oauth2_client.userinfo().get().execute()
 
-# Lists user's files to be displayed initially (in the root notetag folder). Files should be in a user-specific notetag folder, 
-# that will be generated if it did not exist
+# Lists user's files to be displayed based on the current directory (initially the root folder, notetag). 
+# Files should be in a user-specific notetag folder, that will be generated if it did not exist
 def get_items():
     # pickle to cache queries: https://stackoverflow.com/questions/19201290/how-to-save-a-dictionary-to-a-file
     results_location = 'data/results.pkl'
 
-    # Check if files stored locally
+    # Check if files were already stored locally
     if 'results' not in session:
         drive_api = build_drive_api_v3()
-        drive_fields = 'files(id,name,mimeType,shared,webContentLink, appProperties, parents, trashed)'
+        drive_fields = 'files(id,name,mimeType,shared,webContentLink, appProperties, parents, trashed, description)'
         drive_query = 'trashed = false'
         drive_results = drive_api.list(fields=drive_fields, q=drive_query).execute()
         
@@ -109,7 +109,6 @@ def get_items():
         if not 'root_id' in session or not 'directory' in session:
             root_id = root_results[0]['id']
             session['root_id'] = root_id
-            # file_query = '"' + session['root_id'] + '" in parents'
             session['directory'] = {
                 'parent': root_id,
                 'current': root_id
@@ -119,7 +118,6 @@ def get_items():
             return {'files': root_children}
         # Otherwise load all files in the currently viewed directory
         else:
-            # file_query = '"' + session['directory']['current'] + '" in parents'
             current_children = list(filter(lambda x: session['directory']['current'] in x['parents'], pickled_results['files']))
             return {'files': current_children}
     else: 
@@ -150,6 +148,30 @@ def get_items():
 
         session.pop('results', None)
         return {'files': []} 
+    
+# Lists user's files that match inputted tags. Files should be in a user-specific notetag folder, that will be generated if it did not exist
+def search_items(tags):
+    # pickle to cache queries: https://stackoverflow.com/questions/19201290/how-to-save-a-dictionary-to-a-file
+    results_location = 'data/results.pkl'
+
+    # Check if files were already stored locally
+    if 'results' not in session:
+        drive_api = build_drive_api_v3()
+        drive_fields = 'files(id,name,mimeType,shared,webContentLink, appProperties, parents, trashed, description)'
+        drive_query = 'trashed = false'
+        drive_results = drive_api.list(fields=drive_fields, q=drive_query).execute()
+        
+        with open(results_location, 'wb') as f:
+            pickle.dump(drive_results, f)
+
+        session['results'] = results_location
+
+    with open(results_location, 'rb') as f:
+        pickled_results = pickle.load(f)
+    
+    # any searcher: https://www.geeksforgeeks.org/python-test-if-string-contains-element-from-list/
+    results = list(filter(lambda x: 'description' in x and any(tag in x['description'] for tag in tags), pickled_results['files']))
+    return {'files': results}
 
 # https://www.mattbutton.com/2019/01/05/google-authentication-with-python-and-flask/
 def save_file(file_name, mime_type, file_data):
@@ -330,8 +352,7 @@ def process_file_request(file_id):
             # rerender jinja loop with ajax https://stackoverflow.com/questions/40391566/render-jinja-after-jquery-ajax-request-to-flask
             return jsonify({
                 'files': render_template('tablebody.html', files=files),
-                'parent_id': session['directory']['parent'],
-                'root_id': session['root_id']
+                'parent_id': session['directory']['parent']
                 })
 
         media_request = drive_api.get_media(fileId=file_id)
@@ -362,4 +383,16 @@ def process_file_request(file_id):
         if len(tags) > 0:
             tag_file(request.form['fileID'], tags)
         return jsonify({ 'success': True })
+
+@app.route('/gdrive/search', methods=['GET'])
+def search_file():
+    tags = request.args['tags'].split()
+    
+    # Ajax response code/response usage: https://stackoverflow.com/questions/36620864/passing-variables-from-flask-back-to-ajax
+    files = search_items(tags)['files']
+
+    # rerender jinja loop with ajax https://stackoverflow.com/questions/40391566/render-jinja-after-jquery-ajax-request-to-flask
+    return jsonify({
+        'files': render_template('tablebody.html', files=files)
+        })
     
