@@ -139,7 +139,7 @@ def get_items():
             }
         }
 
-        output = drive_api.create(body=body,
+        drive_api.create(body=body,
                     fields='id,name,mimeType,appProperties').execute()
         
         session['root_id'] = file_id
@@ -148,6 +148,7 @@ def get_items():
             'current': file_id
         }
 
+        session.pop('results', None)
         return {'files': []} 
 
 # https://www.mattbutton.com/2019/01/05/google-authentication-with-python-and-flask/
