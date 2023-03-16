@@ -1,6 +1,7 @@
 import tempfile
 import io
 import logging
+import pickle
 
 from flask import Flask, session, redirect, url_for, render_template, request, redirect, send_file, jsonify
 from werkzeug.utils import secure_filename
@@ -81,28 +82,46 @@ def get_user_info():
 # Lists user's files to be displayed initially (in the root notetag folder). Files should be in a user-specific notetag folder, 
 # that will be generated if it did not exist
 def get_items():
-    drive_api = build_drive_api_v3()
-    root_fields = 'files(id,mimeType,appProperties)'
-    # query help: https://stackoverflow.com/questions/48555368/how-can-i-search-custom-file-properties-using-the-google-drive-api
-    root_query = 'mimeType="application/vnd.google-apps.folder" and appProperties has { key="sourceID" and value="notetag" }'
+    # pickle to cache queries: https://stackoverflow.com/questions/19201290/how-to-save-a-dictionary-to-a-file
+    results_location = 'data/results.pkl'
 
-    root_results = drive_api.list(fields=root_fields, q=root_query).execute()
+    # Check if files stored locally
+    if 'results' not in session:
+        drive_api = build_drive_api_v3()
+        drive_fields = 'files(id,name,mimeType,shared,webContentLink, appProperties, parents, trashed)'
+        drive_query = 'trashed = false'
+        drive_results = drive_api.list(fields=drive_fields, q=drive_query).execute()
+        
+        with open(results_location, 'wb') as f:
+            pickle.dump(drive_results, f)
 
-    if len(root_results['files']) > 0:
-        file_fields = 'files(id,name,mimeType,shared,webContentLink, parents)'
+        session['results'] = results_location
+
+    with open(results_location, 'rb') as f:
+        pickled_results = pickle.load(f)
+    # Try to find the root folder, if any
+    root_results = list(filter(lambda x: (x['mimeType']=='application/vnd.google-apps.folder' and ('appProperties' in x)
+                                      and x['appProperties'].get('sourceID') == 'notetag'), pickled_results['files']))
+    
+
+    if len(root_results) > 0:
         # If user was inactive too long, and session variables were cleared, reset them
         if not 'root_id' in session or not 'directory' in session:
-            session['root_id'] = root_results['files'][0]['id']
-            file_query = '"' + session['root_id'] + '" in parents'
+            root_id = root_results[0]['id']
+            session['root_id'] = root_id
+            # file_query = '"' + session['root_id'] + '" in parents'
             session['directory'] = {
-                'parent': root_results['files'][0]['id'],
-                'current': root_results['files'][0]['id']
+                'parent': root_id,
+                'current': root_id
             }
-            return drive_api.list(fields=file_fields, q=file_query).execute()
+            # Find all directories directly under the root
+            root_children = list(filter(lambda x: session['root_id'] in x['parents'], pickled_results['files']))
+            return {'files': root_children}
         # Otherwise load all files in the currently viewed directory
         else:
-            file_query = '"' + session['directory']['current'] + '" in parents'
-            return drive_api.list(fields=file_fields, q=file_query).execute()
+            # file_query = '"' + session['directory']['current'] + '" in parents'
+            current_children = list(filter(lambda x: session['directory']['current'] in x['parents'], pickled_results['files']))
+            return {'files': current_children}
     else: 
         # If there is no notetag folder, must either be user's first time or they deleted the folder in their drive
         # Either way, there should be no content
@@ -119,70 +138,92 @@ def get_items():
             }
         }
 
-        drive_api.create(body=body,
-                        fields='id,name,mimeType,appProperties').execute()
+        output = drive_api.create(body=body,
+                    fields='id,name,mimeType,appProperties').execute()
+        
         session['root_id'] = file_id
         session['directory'] = {
             'parent': file_id,
             'current': file_id
         }
+
         return {'files': []} 
 
 # https://www.mattbutton.com/2019/01/05/google-authentication-with-python-and-flask/
 def save_file(file_name, mime_type, file_data):
-    drive_api = build_drive_api_v3()
+    try:
+        drive_api = build_drive_api_v3()
 
-    generate_ids_result = drive_api.generateIds(count=1).execute()
-    file_id = generate_ids_result['ids'][0]
+        generate_ids_result = drive_api.generateIds(count=1).execute()
+        file_id = generate_ids_result['ids'][0]
 
-    body = {
-        'id': file_id,
-        'name': file_name,
-        'mimeType': mime_type,
-        'parents': [session['directory']['current']]
-    }
+        body = {
+            'id': file_id,
+            'name': file_name,
+            'mimeType': mime_type,
+            'parents': [session['directory']['current']]
+        }
 
-    media_body = MediaIoBaseUpload(file_data,
-                                mimetype=mime_type,
-                                resumable=True)
+        media_body = MediaIoBaseUpload(file_data,
+                                    mimetype=mime_type,
+                                    resumable=True)
+        
 
-    drive_api.create(body=body,
-        media_body=media_body,
-        fields='id,name,mimeType,createdTime,modifiedTime, parents').execute()
-
-    return file_id
+        drive_api.create(body=body,
+            media_body=media_body,
+            fields='id,name,mimeType,shared,webContentLink, appProperties, parents').execute()
+        # Check if database updated next render
+        session.pop('results', None)
+        return file_id
+    except HttpError as error:
+        # Operation failed, display error
+        # Check if stored files match database
+        session.pop('results', None)
 
 
 def save_folder(file_name):
-    drive_api = build_drive_api_v3()
+    try:
+        drive_api = build_drive_api_v3()
 
-    generate_ids_result = drive_api.generateIds(count=1).execute()
-    file_id = generate_ids_result['ids'][0]
+        generate_ids_result = drive_api.generateIds(count=1).execute()
+        file_id = generate_ids_result['ids'][0]
 
-    body = {
-        'id': file_id,
-        'name': file_name,
-        'mimeType': 'application/vnd.google-apps.folder',
-        'parents': [session['directory']['current']]
-    }
+        body = {
+            'id': file_id,
+            'name': file_name,
+            'mimeType': 'application/vnd.google-apps.folder',
+            'parents': [session['directory']['current']]
+        }
 
-    drive_api.create(body=body,
-        fields='id,name,mimeType,createdTime,modifiedTime, parents').execute()
+        drive_api.create(body=body,
+            fields='id,name,mimeType,createdTime,modifiedTime, parents').execute()
 
-    return file_id
+        # Check if database updated next render
+        session.pop('results', None)
+        return file_id
+    except HttpError as error:
+        # Operation failed, display error
+        # Check if stored files match database
+        session.pop('results', None)
 
 
 # https://developers.google.com/drive/api/v2/reference/files/delete
 def delete_file(file_id):
-    drive_api = build_drive_api_v3()
-    drive_api.delete(fileId=file_id).execute()
+    try:
+        drive_api = build_drive_api_v3()
+        drive_api.delete(fileId=file_id).execute()
+        # Check if database updated next render
+        session.pop('results', None)
+    except HttpError as error:
+        # Operation failed, display error
+        # Check if stored files match database
+        session.pop('results', None)
 
 
 @app.route("/")
 def index():
     try:
         items = get_items()
-        
         return render_template('list.html', files=items['files'], user_info=get_user_info(), root_id=session['root_id'],
                                parent_id=session['directory']['parent'])
     # If missing important session keys (authentication, root folder tracking), make user reauthenticate
@@ -205,6 +246,7 @@ def logout():
     session.pop('google-token', None)
     session.pop('root-id', None)
     session.pop('directory', None)
+    session.pop('results', None)
     return redirect('/')
 
 # https://www.mattbutton.com/2019/01/05/google-authentication-with-python-and-flask/

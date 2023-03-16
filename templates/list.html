@@ -124,7 +124,8 @@
             });
             $('.up-directory-button').click(function(event) { 
                 event.preventDefault();
-                const parentID = $('.up-directory-button').data('id');
+                const parentID = $(this).attr('data-id');
+                console.log(parentID)
                 const requestURL = "/gdrive/file/" + parentID;
                 $.ajax({
                     type: "GET",
