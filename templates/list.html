@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css" integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
+    <title>Google Drive File Browser</title>
+  </head>
+  <body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+      <div class="container">
+          <a class="navbar-brand" href="#">Google Drive File Browser</a>
+          <ul class="navbar-nav mr-auto"></ul>
+          <span class="navbar-text mr-2">
+            Currently logged in as {{ user_info['given_name'] }}
+          </span>
+          <a href="/logout" class="btn btn-primary" role="button" aria-pressed="true">Logout</a>
+      </div>
+    </nav>
+    <div class="container">   
+        <h3 class="mt-4">Upload a new file</h3>
+        <form method='POST' enctype='multipart/form-data' action="/gdrive/upload">
+        <div class="input-group mb-3">
+            <div class="custom-file">
+            <input type="file" name="file" class="custom-file-input" id="inputGroupFile01" aria-describedby="inputGroupFileAddon01">
+            <label class="custom-file-label" for="inputGroupFile01">Choose file</label>
+            </div>
+            <div class="input-group-append">
+            <input class="input-group-text" type="submit" value="Upload" />
+            </div>
+        </div>
+        </form>
+        <h3 class="mt-4">Recent Files</h3>
+        <table class="table">
+        <thead>
+        <tr>
+            <th scope="col">Name</th>
+            <th scope="col">Mime Type</th>
+            <th scope="col">Created Time</th>
+            <th scope="col"></th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for file in files %}
+        <tr data-id="{{file['id']}}">
+            <td>{{ file['name'] }}</td>
+            <td>{{ file['mimeType'] }}</td>
+            <td>{{ file['createdTime'] }}</td>
+            <td><a href="/gdrive/file/{{file['id']}}">View</a></td>
+            <td><button class="delete-button" data-id="{{file['id']}}">Delete</button></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+        </table>
+    </div>
+    <script src="https://code.jquery.com/jquery-3.6.4.min.js" integrity="sha384-UG8ao2jwOWB7/oDdObZc6ItJmwUkR/PfMyt9Qs5AwX7PsnYn1CRKCTWyncPTWvaS" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js" integrity="sha384-ZMP7rVo3mIykV+2+9J3UJ46jBk0WLaUAdn689aCwoqbBJiSnjAK/l8WvCWPIPm49" crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js" integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy" crossorigin="anonymous"></script>
+    <!-- Trim user-inputted files to only contain file, not relative paths -->
+    <!-- Send delete request on button click-->
+    <!-- https://stackoverflow.com/questions/8442552/passing-parameters-to-a-jquery-function-from-a-button-click -->
+    <!-- https://stackoverflow.com/questions/30950529/jquery-ajax-call-to-be-triggered-onclick -->
+
+    <script type="text/javascript">
+        $(document).ready(function() {
+            $('.custom-file-input').on('change', function() { 
+                let fileName = $(this).val().split('\\').pop(); 
+                $(this).next('.custom-file-label').addClass("selected").html(fileName); 
+            });
+            $('.delete-button').click(function(event) { 
+                event.preventDefault();
+                const fileID = $(this).data('id');
+                const requestURL = "/gdrive/file/" + fileID;
+                $.ajax({
+                    type: "DELETE",
+                    url: requestURL,
+                    data: {
+                        fileID: fileID
+                    }, success: function(response) {
+                        console.log($('.delete-button').find('[data-id="' + fileID +'"]'));
+                        $('tr[data-id="'+ fileID +'"]').remove();
+                    }
+                });
+            });
+        })
+    </script>
+    
+    <script>
+        
+    </script>
+  </body>
+</html>
