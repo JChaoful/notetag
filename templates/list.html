@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css" integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" integrity="sha384-GLhlTQ8iRABdZLl6O3oVMWSktQOp6b7In1Zl3/Jr59b6EGGoI1aFkw7cmDA6j6gD" crossorigin="anonymous">
     <title>Google Drive File Browser</title>
   </head>
   <body>
@@ -20,15 +20,27 @@
     <div class="container">   
         <h3 class="mt-4">Upload a new file</h3>
         <form method='POST' enctype='multipart/form-data' action="/gdrive/upload">
-        <div class="input-group mb-3">
-            <div class="custom-file">
-            <input type="file" name="file" class="custom-file-input" id="inputGroupFile01" aria-describedby="inputGroupFileAddon01">
-            <label class="custom-file-label" for="inputGroupFile01">Choose file</label>
+            <div class="input-group mb-3">
+                <div class="custom-file">
+                <input type="file" name="file" class="custom-file-input" id="inputGroupFile01" aria-describedby="inputGroupFileAddon01">
+                <label class="custom-file-label" for="inputGroupFile01">Choose file</label>
+                </div>
+                <div class="input-group-append">
+                <input class="input-group-text" type="submit" value="Upload" />
+                </div>
             </div>
-            <div class="input-group-append">
-            <input class="input-group-text" type="submit" value="Upload" />
+        </form>
+        <h3 class="mt-4">New folder</h3>
+        <form method='POST' enctype='multipart/form-data' action="/gdrive/upload">
+            <div class="input-group mb-3">
+                <div class="custom-folder">
+                <input type="text" name="folder-name" class="custom-folder-input" id="inputFolderName01" placeholder="Insert new folder name" aria-describedby="inputFolderName01">
+                <label class="custom-folder-label visually-hidden" for="inputFolderName01">Insert new folder name</label>
+                </div>
+                <div class="input-group-append">
+                <input class="input-group-text" type="submit" value="Submit" />
+                </div>
             </div>
-        </div>
         </form>
         <h3 class="mt-4">Recent Files</h3>
         <table class="table">
@@ -36,17 +48,30 @@
         <tr>
             <th scope="col">Name</th>
             <th scope="col">Mime Type</th>
-            <th scope="col">Created Time</th>
-            <th scope="col"></th>
+            <th scope="col">fileID</th>
+            <th scope="col">parentID</th>
+            <th scope="col">
+                <button class="up-directory-button" data-id="{{parent_id}}">Go up a Folder</button>
+                <button class="return-root-button" data-id="{{root_id}}">Return to Root</button>
+            </th>
         </tr>
         </thead>
         <tbody>
         {% for file in files %}
         <tr data-id="{{file['id']}}">
-            <td>{{ file['name'] }}</td>
+            {% if file['mimeType'] == 'application/vnd.google-apps.folder' %}
+                <td><button class="folder-button"  data-id="{{file['id']}}">{{ file['name'] }}</button></td>
+            {% else %}
+                <td>{{ file['name'] }}</td>
+            {% endif %}
             <td>{{ file['mimeType'] }}</td>
-            <td>{{ file['createdTime'] }}</td>
-            <td><a href="/gdrive/file/{{file['id']}}">View</a></td>
+            <td>{{ file['id'] }}</td>
+            <td>{{ file['parents'][0] }}</td>
+            {% if file['mimeType'] != 'application/vnd.google-apps.folder' %}
+                <td><a href="/gdrive/file/{{file['id']}}">View</a></td>
+            {% else %}
+                <td></td>
+            {% endif %}
             <td><button class="delete-button" data-id="{{file['id']}}">Delete</button></td>
         </tr>
         {% endfor %}
@@ -77,8 +102,55 @@
                     data: {
                         fileID: fileID
                     }, success: function(response) {
-                        console.log($('.delete-button').find('[data-id="' + fileID +'"]'));
                         $('tr[data-id="'+ fileID +'"]').remove();
+                    }
+                });
+            });
+            $('.folder-button').click(function(event) { 
+                event.preventDefault();
+                const fileID = $(this).data('id');
+                const requestURL = "/gdrive/file/" + fileID;
+                $.ajax({
+                    type: "GET",
+                    url: requestURL,
+                    data: {
+                        fileID: fileID
+                    }, success: function(response) {
+                        $('.up-directory-button').attr('data-id', response['parent_id']);
+                        $('tbody').empty();
+                        $('tbody').append(response['files']);
+                    }
+                });
+            });
+            $('.up-directory-button').click(function(event) { 
+                event.preventDefault();
+                const parentID = $('.up-directory-button').data('id');
+                const requestURL = "/gdrive/file/" + parentID;
+                $.ajax({
+                    type: "GET",
+                    url: requestURL,
+                    data: {
+                        fileID: parentID
+                    }, success: function(response) {
+                        $('.up-directory-button').attr('data-id', response['parent_id']);
+                        $('tbody').empty();
+                        $('tbody').append(response['files']);
+                    }
+                });
+            });
+            $('.return-root-button').click(function(event) { 
+                event.preventDefault();
+                const rootID = $(this).data('id');
+                const requestURL = "/gdrive/file/" + rootID;
+                $.ajax({
+                    type: "GET",
+                    url: requestURL,
+                    data: {
+                        fileID: rootID
+                    }, success: function(response) {
+                        $('.up-directory-button').attr('data-id', response['parent_id']);
+                        $('tbody').empty();
+                        $('tbody').append(response['files']);
                     }
                 });
             });

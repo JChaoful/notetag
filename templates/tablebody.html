@@ -1,0 +1,55 @@
+
+
+{% for file in files %}
+<tr data-id="{{file['id']}}">
+    {% if file['mimeType'] == 'application/vnd.google-apps.folder' %}
+        <td><button class="folder-button"  data-id="{{file['id']}}">{{ file['name'] }}</button></td>
+    {% else %}
+        <td>{{ file['name'] }}</td>
+    {% endif %}
+    <td>{{ file['mimeType'] }}</td>
+    <td>{{ file['id'] }}</td>
+    <td>{{ file['parents'][0] }}</td>
+    {% if file['mimeType'] != 'application/vnd.google-apps.folder' %}
+        <td><a href="/gdrive/file/{{file['id']}}">View</a></td>
+    {% else %}
+        <td></td>
+    {% endif %}
+    <td><button class="delete-button" data-id="{{file['id']}}">Delete</button></td>
+</tr>
+{% endfor %}
+
+<script type="text/javascript">
+    $(document).ready(function() {
+        $('.delete-button').click(function(event) { 
+            event.preventDefault();
+            const fileID = $(this).data('id');
+            const requestURL = "/gdrive/file/" + fileID;
+            $.ajax({
+                type: "DELETE",
+                url: requestURL,
+                data: {
+                    fileID: fileID
+                }, success: function(response) {
+                    $('tr[data-id="'+ fileID +'"]').remove();
+                }
+            });
+        });
+        $('.folder-button').click(function(event) { 
+            event.preventDefault();
+            const fileID = $(this).data('id');
+            const requestURL = "/gdrive/file/" + fileID;
+            $.ajax({
+                type: "GET",
+                url: requestURL,
+                data: {
+                    fileID: fileID
+                }, success: function(response) {
+                    $('.up-directory-button').attr('data-id', response['parent_id']);
+                    $('tbody').empty();
+                    $('tbody').append(response['files']);
+                }
+            });
+        });
+    })
+</script>

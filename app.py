@@ -78,89 +78,113 @@ def get_user_info():
 
     return oauth2_client.userinfo().get().execute()
 
-# Lists user's files to be displayed. Files should be in a user-specific notetag folder, that will be
-# generated if it did not exist
+# Lists user's files to be displayed initially (in the root notetag folder). Files should be in a user-specific notetag folder, 
+# that will be generated if it did not exist
 def get_items():
-    try:
-        drive_api = build_drive_api_v3()
-        user_id =  get_user_info()['id']
-        root_fields = 'files(id,mimeType,appProperties)'
-        # query help: https://stackoverflow.com/questions/48555368/how-can-i-search-custom-file-properties-using-the-google-drive-api
-        root_query = 'mimeType="application/vnd.google-apps.folder" and appProperties has { key="rootID" and value="'+ user_id +'" }'
+    drive_api = build_drive_api_v3()
+    root_fields = 'files(id,mimeType,appProperties)'
+    # query help: https://stackoverflow.com/questions/48555368/how-can-i-search-custom-file-properties-using-the-google-drive-api
+    root_query = 'mimeType="application/vnd.google-apps.folder" and appProperties has { key="sourceID" and value="notetag" }'
 
-        root_results = drive_api.list(fields=root_fields, q=root_query).execute()
+    root_results = drive_api.list(fields=root_fields, q=root_query).execute()
 
-        if len(root_results['files']) > 0:
-            file_fields = 'files(id,name,mimeType,createdTime,modifiedTime,shared,webContentLink, parents)'
+    if len(root_results['files']) > 0:
+        file_fields = 'files(id,name,mimeType,shared,webContentLink, parents)'
+        # If user was inactive too long, and session variables were cleared, reset them
+        if not 'root_id' in session or not 'directory' in session:
             session['root_id'] = root_results['files'][0]['id']
-            # should not display root folder
             file_query = '"' + session['root_id'] + '" in parents'
-            return drive_api.list(fields=file_fields, q=file_query).execute()
-        else: 
-            # If there is no notetag folder, must either be user's first time or they deleted the folder in their drive
-            # Either way, there should be no content
-            # create notetag root folder
-            generate_ids_result = drive_api.generateIds(count=1).execute()
-            file_id = generate_ids_result['ids'][0]
-
-            body = {
-                'id': file_id,
-                'name': 'notetag',
-                'mimeType': 'application/vnd.google-apps.folder',
-                'appProperties': {
-                    'rootID': user_id,
-                }
+            session['directory'] = {
+                'parent': root_results['files'][0]['id'],
+                'current': root_results['files'][0]['id']
             }
-
-            drive_api.create(body=body,
-                            fields='id,name,mimeType,createdTime,modifiedTime,appProperties').execute()
-            return {'files': []}
-    except HttpError as error:
-        print('An error occurred: %s' % error)   
-
-# https://www.mattbutton.com/2019/01/05/google-authentication-with-python-and-flask/
-def save_file(file_name, mime_type, file_data):
-    try:
-        drive_api = build_drive_api_v3()
-
+            return drive_api.list(fields=file_fields, q=file_query).execute()
+        # Otherwise load all files in the currently viewed directory
+        else:
+            file_query = '"' + session['directory']['current'] + '" in parents'
+            return drive_api.list(fields=file_fields, q=file_query).execute()
+    else: 
+        # If there is no notetag folder, must either be user's first time or they deleted the folder in their drive
+        # Either way, there should be no content
+        # create notetag root folder
         generate_ids_result = drive_api.generateIds(count=1).execute()
         file_id = generate_ids_result['ids'][0]
 
         body = {
             'id': file_id,
-            'name': file_name,
-            'mimeType': mime_type,
-            'parents': [session['root_id']]
+            'name': 'notetag',
+            'mimeType': 'application/vnd.google-apps.folder',
+            'appProperties': {
+                'sourceID': 'notetag',
+            }
         }
 
-        media_body = MediaIoBaseUpload(file_data,
-                                    mimetype=mime_type,
-                                    resumable=True)
+        drive_api.create(body=body,
+                        fields='id,name,mimeType,appProperties').execute()
+        session['root_id'] = file_id
+        session['directory'] = {
+            'parent': file_id,
+            'current': file_id
+        }
+        return {'files': []} 
 
-        file = drive_api.create(body=body,
-                        media_body=media_body,
-                        fields='id,name,mimeType,createdTime,modifiedTime, parents').execute()
+# https://www.mattbutton.com/2019/01/05/google-authentication-with-python-and-flask/
+def save_file(file_name, mime_type, file_data):
+    drive_api = build_drive_api_v3()
 
-        return file_id
-    except (HttpError, KeyError) as error:
-        print('An error occurred: %s' % error)
+    generate_ids_result = drive_api.generateIds(count=1).execute()
+    file_id = generate_ids_result['ids'][0]
+
+    body = {
+        'id': file_id,
+        'name': file_name,
+        'mimeType': mime_type,
+        'parents': [session['directory']['current']]
+    }
+
+    media_body = MediaIoBaseUpload(file_data,
+                                mimetype=mime_type,
+                                resumable=True)
+
+    drive_api.create(body=body,
+        media_body=media_body,
+        fields='id,name,mimeType,createdTime,modifiedTime, parents').execute()
+
+    return file_id
+
+
+def save_folder(file_name):
+    drive_api = build_drive_api_v3()
+
+    generate_ids_result = drive_api.generateIds(count=1).execute()
+    file_id = generate_ids_result['ids'][0]
+
+    body = {
+        'id': file_id,
+        'name': file_name,
+        'mimeType': 'application/vnd.google-apps.folder',
+        'parents': [session['directory']['current']]
+    }
+
+    drive_api.create(body=body,
+        fields='id,name,mimeType,createdTime,modifiedTime, parents').execute()
+
+    return file_id
+
 
 # https://developers.google.com/drive/api/v2/reference/files/delete
 def delete_file(file_id):
-    try:
-        drive_api = build_drive_api_v3()
-        drive_api.delete(fileId=file_id).execute()
-    except HttpError as error:
-        print('An error occurred: %s' % error)
+    drive_api = build_drive_api_v3()
+    drive_api.delete(fileId=file_id).execute()
+
 
 @app.route("/")
 def index():
     try:
-        # drive_api = build_drive_api_v3()
-        # file_fields = 'files(id,name,mimeType,createdTime,modifiedTime,shared,webContentLink, parents)'
-        # items2 = drive_api.list(fields=file_fields).execute()
         items = get_items()
-        return render_template('list.html', files=items['files'], user_info=get_user_info())
+        
+        return render_template('list.html', files=items['files'], user_info=get_user_info(), root_id=session['root_id'],
+                               parent_id=session['directory']['parent'])
     # If missing important session keys (authentication, root folder tracking), make user reauthenticate
     except KeyError:
         return redirect(url_for("login"))
@@ -179,27 +203,40 @@ def authorize():
 @app.route('/logout')
 def logout():
     session.pop('google-token', None)
+    session.pop('root-id', None)
+    session.pop('directory', None)
     return redirect('/')
 
 # https://www.mattbutton.com/2019/01/05/google-authentication-with-python-and-flask/
 @app.route('/gdrive/upload', methods=['GET', 'POST'])
 def upload_file():
-    if 'file' not in request.files:
-        return redirect('/')
-
-    file = request.files['file']
-    if (not file):
-        return redirect('/')
+    # Form as submitted from folder uploader
+    if len(request.form) > 0:
+        folder_name = secure_filename(request.form.getlist('folder-name')[0])
+        # Ignore empty-named folder requests
+        if folder_name == '':
+            return redirect('/')
         
-    filename = secure_filename(file.filename)
+        save_folder(folder_name)
 
-    fp = tempfile.TemporaryFile()
-    ch = file.read()
-    fp.write(ch)
-    fp.seek(0)
+    # Form was submitted from file uploader
+    else:
+        if 'file' not in request.files:
+            return redirect('/')
 
-    mime_type = request.headers['Content-Type']
-    save_file(filename, mime_type, fp)
+        file = request.files['file']
+        if (not file):
+            return redirect('/')
+            
+        filename = secure_filename(file.filename)
+
+        fp = tempfile.TemporaryFile()
+        ch = file.read()
+        fp.write(ch)
+        fp.seek(0)
+
+        mime_type = request.headers['Content-Type']
+        save_file(filename, mime_type, fp)
 
     return redirect('/')
 
@@ -209,7 +246,30 @@ def process_file_request(file_id):
     if request.method == 'GET':
         drive_api = build_drive_api_v3()
 
-        metadata = drive_api.get(fields="name,mimeType", fileId=file_id).execute()
+        metadata = drive_api.get(fields="name,mimeType,parents", fileId=file_id).execute()
+
+        # if the requested file is a folder, update the current directory instead
+        if metadata['mimeType'] =='application/vnd.google-apps.folder':
+            # Cannot view files above the notetag directory, edge case
+            if file_id == session['root_id']:
+                session['directory'] = {
+                    'parent': file_id,
+                    'current': file_id
+                }
+            else:
+                session['directory'] = {
+                    'parent': metadata['parents'][0],
+                    'current': file_id
+                }
+            # Ajax response code/response usage: https://stackoverflow.com/questions/36620864/passing-variables-from-flask-back-to-ajax
+            files = get_items()['files']
+
+            # rerender jinja loop with ajax https://stackoverflow.com/questions/40391566/render-jinja-after-jquery-ajax-request-to-flask
+            return jsonify({
+                'files': render_template('tablebody.html', files=files),
+                'parent_id': session['directory']['parent'],
+                'root_id': session['root_id']
+                })
 
         media_request = drive_api.get_media(fileId=file_id)
         fh = io.BytesIO()
