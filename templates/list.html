@@ -72,6 +72,7 @@
             {% else %}
                 <td></td>
             {% endif %}
+            <td><button class="tags-button" data-id="{{file['id']}}">Tags</button></td>
             <td><button class="delete-button" data-id="{{file['id']}}">Delete</button></td>
         </tr>
         {% endfor %}
@@ -92,7 +93,7 @@
                 let fileName = $(this).val().split('\\').pop(); 
                 $(this).next('.custom-file-label').addClass("selected").html(fileName); 
             });
-            $('.delete-button').click(function(event) { 
+            $('tbody').on('click', '.delete-button', function(event) { 
                 event.preventDefault();
                 const fileID = $(this).data('id');
                 const requestURL = "/gdrive/file/" + fileID;
@@ -106,7 +107,7 @@
                     }
                 });
             });
-            $('.folder-button').click(function(event) { 
+            $('tbody').on('click', '.folder-button', function(event) { 
                 event.preventDefault();
                 const fileID = $(this).data('id');
                 const requestURL = "/gdrive/file/" + fileID;

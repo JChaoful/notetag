@@ -126,6 +126,7 @@ def get_items():
         # If there is no notetag folder, must either be user's first time or they deleted the folder in their drive
         # Either way, there should be no content
         # create notetag root folder
+        drive_api = build_drive_api_v3()
         generate_ids_result = drive_api.generateIds(count=1).execute()
         file_id = generate_ids_result['ids'][0]
 

@@ -18,38 +18,3 @@
     <td><button class="delete-button" data-id="{{file['id']}}">Delete</button></td>
 </tr>
 {% endfor %}
-
-<script type="text/javascript">
-    $(document).ready(function() {
-        $('.delete-button').click(function(event) { 
-            event.preventDefault();
-            const fileID = $(this).data('id');
-            const requestURL = "/gdrive/file/" + fileID;
-            $.ajax({
-                type: "DELETE",
-                url: requestURL,
-                data: {
-                    fileID: fileID
-                }, success: function(response) {
-                    $('tr[data-id="'+ fileID +'"]').remove();
-                }
-            });
-        });
-        $('.folder-button').click(function(event) { 
-            event.preventDefault();
-            const fileID = $(this).data('id');
-            const requestURL = "/gdrive/file/" + fileID;
-            $.ajax({
-                type: "GET",
-                url: requestURL,
-                data: {
-                    fileID: fileID
-                }, success: function(response) {
-                    $('.up-directory-button').attr('data-id', response['parent_id']);
-                    $('tbody').empty();
-                    $('tbody').append(response['files']);
-                }
-            });
-        });
-    })
-</script>
