@@ -221,6 +221,25 @@ def delete_file(file_id):
         # Check if stored files match database
         session.pop('results', None)
 
+def tag_file(file_id, tags):
+    try:
+        # always have notetag tag for ease of finding in drive
+        if not 'notetag' in tags:
+            tags.append('notetag')
+        new_description = ', '.join(list(map(lambda x: '#' + x, tags)))
+        drive_api = build_drive_api_v3()
+        
+        body = {
+            'description': new_description
+        }
+        drive_api.update(fileId=file_id,body=body).execute()
+        # Check if database updated next render
+        session.pop('results', None)
+    except HttpError as error:
+        # Operation failed, display error
+        # Check if stored files match database
+        session.pop('results', None)
+
 
 @app.route("/")
 def index():
@@ -254,7 +273,7 @@ def logout():
 # https://www.mattbutton.com/2019/01/05/google-authentication-with-python-and-flask/
 @app.route('/gdrive/upload', methods=['GET', 'POST'])
 def upload_file():
-    # Form as submitted from folder uploader
+    # Form was submitted from folder uploader
     if len(request.form) > 0:
         folder_name = secure_filename(request.form.getlist('folder-name')[0])
         # Ignore empty-named folder requests
@@ -285,7 +304,7 @@ def upload_file():
     return redirect('/')
 
 # https://www.mattbutton.com/2019/01/05/google-authentication-with-python-and-flask/
-@app.route('/gdrive/file/<file_id>', methods=['GET', 'DELETE'])
+@app.route('/gdrive/file/<file_id>', methods=['GET', 'DELETE', 'PATCH'])
 def process_file_request(file_id):
     if request.method == 'GET':
         drive_api = build_drive_api_v3()
@@ -338,5 +357,9 @@ def process_file_request(file_id):
     elif request.method == 'DELETE':
         delete_file(file_id)
         return jsonify({ 'success': True })
-
+    elif request.method == 'PATCH':
+        tags = request.form['tags'].split()
+        if len(tags) > 0:
+            tag_file(request.form['fileID'], tags)
+        return jsonify({ 'success': True })
     

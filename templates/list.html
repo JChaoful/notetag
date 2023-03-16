@@ -22,7 +22,7 @@
         <form method='POST' enctype='multipart/form-data' action="/gdrive/upload">
             <div class="input-group mb-3">
                 <div class="custom-file">
-                <input type="file" name="file" class="custom-file-input" id="inputGroupFile01" aria-describedby="inputGroupFileAddon01">
+                <input type="file" name="file" class="custom-file-input" id="inputGroupFile01" aria-describedby="inputGroupFileAddon01"/>
                 <label class="custom-file-label" for="inputGroupFile01">Choose file</label>
                 </div>
                 <div class="input-group-append">
@@ -34,7 +34,7 @@
         <form method='POST' enctype='multipart/form-data' action="/gdrive/upload">
             <div class="input-group mb-3">
                 <div class="custom-folder">
-                <input type="text" name="folder-name" class="custom-folder-input" id="inputFolderName01" placeholder="Insert new folder name" aria-describedby="inputFolderName01">
+                <input type="text" name="folder-name" class="custom-folder-input" id="inputFolderName01" placeholder="Insert new folder name" aria-describedby="inputFolderName01"/>
                 <label class="custom-folder-label visually-hidden" for="inputFolderName01">Insert new folder name</label>
                 </div>
                 <div class="input-group-append">
@@ -42,6 +42,7 @@
                 </div>
             </div>
         </form>
+        <div class="tags-container"></div>
         <h3 class="mt-4">Recent Files</h3>
         <table class="table">
         <thead>
@@ -72,7 +73,7 @@
             {% else %}
                 <td></td>
             {% endif %}
-            <td><button class="tags-button" data-id="{{file['id']}}">Tags</button></td>
+            <td><button class="tags-button" data-id="{{file['id']}}" data-filename="{{file['name']}}">Tags</button></td>
             <td><button class="delete-button" data-id="{{file['id']}}">Delete</button></td>
         </tr>
         {% endfor %}
@@ -93,6 +94,44 @@
                 let fileName = $(this).val().split('\\').pop(); 
                 $(this).next('.custom-file-label').addClass("selected").html(fileName); 
             });
+            $('tbody').on('click', '.tags-button', function(event) { 
+                event.preventDefault();
+                const fileID = $(this).data('id');
+                const fileName = $(this).data('filename');
+                const requestURL = "/gdrive/file/" + fileID;
+                $('.tag-form-container').remove();
+                $('.tags-container').append($('<div class="tag-form-container">\
+                        <h4>' + fileName + '</h4>\
+                        <form class="tag-form" data-id="' + fileID +'">\
+                        <div class="input-group mb-3">\
+                            <div class="custom-tags">\
+                            <input type="text" name="tags" class="custom-tags-input" id="inputTagsName01" placeholder="Insert whitespace-separated tags" aria-describedby="inputTagsName01"/>\
+                            <label class="custom-tags-label visually-hidden" for="inputTagsName01">Insert whitespace-separated tags</label>\
+                            </div>\
+                            <div class="input-group-append">\
+                            <input class="input-group-text" type="submit" value="Submit" />\
+                            </div>\
+                        </div>\
+                    </form>\
+                </div>'));
+            });
+            // form override request to Patch: https://stackoverflow.com/questions/59554421/how-perform-patch-request-from-html-form-using-nodejs
+            $('.tags-container').on('submit', '.tag-form', function(event) {
+                event.preventDefault();
+                const fileID = $(this).data('id');
+                const tags = $('.custom-tags-input').val()
+                const requestURL = "/gdrive/file/" + fileID;
+                $.ajax({
+                    type: "PATCH",
+                    url: requestURL,
+                    data: {
+                        fileID: fileID,
+                        tags: tags
+                    }, success: function(response) {
+                        $('.tag-form-container').remove();
+                    }
+                });
+            })
             $('tbody').on('click', '.delete-button', function(event) { 
                 event.preventDefault();
                 const fileID = $(this).data('id');
@@ -157,10 +196,6 @@
                 });
             });
         })
-    </script>
-    
-    <script>
-        
     </script>
   </body>
 </html>
